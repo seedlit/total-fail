@@ -6,16 +6,17 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import accuracy_score
 import pydot
 from sklearn.tree import export_graphviz
+import joblib
 
 
 if __name__ == "__main__":
 
     features_csv_path = "elon_features/elonmusk_features.csv"
-    out_dir = "random_forest"
+    out_dir = "random_forest"    
 
     os.makedirs(out_dir, exist_ok=True)
     
-    features_df = pd.read_csv(features_csv_path, index_col=0)
+    features_df = pd.read_csv(features_csv_path, index_col=0)   # index col=0 doesn't read first column into dataframe
     # defining labels
     labels = np.array(features_df['tweet_bool'])
 
@@ -26,14 +27,21 @@ if __name__ == "__main__":
     # Convert to numpy array
     features = np.array(features_df)
 
-    # Using Skicit-learn to split data into training and testing sets    
-    train_features, test_features, train_labels, test_labels = train_test_split(features, labels, test_size = 0.25, random_state = 42)
+    # Using Skicit-learn to split data into training and validation sets    
+    # train_features, val_features, train_labels, val_labels = train_test_split(features, labels, test_size = 0.25, random_state = 42)
+    
+    # splitting features into train and val set.
+    # we will take the last 2 months as validation set
+    train_features = features[0:-861,:]
+    val_features = features[-861:,:]
+    train_labels = labels[0:-861]
+    val_labels = labels[-861:]
 
     # printing shapes to ensure everything is fine
     print('Training Features Shape:', train_features.shape)
     print('Training Labels Shape:', train_labels.shape)
-    print('Testing Features Shape:', test_features.shape)
-    print('Testing Labels Shape:', test_labels.shape)
+    print('Validation Features Shape:', val_features.shape)
+    print('Validation Labels Shape:', val_labels.shape)
 
      
     # Instantiate model with 1000 decision trees
@@ -41,20 +49,27 @@ if __name__ == "__main__":
     # Train the model on training data
     rf.fit(train_features, train_labels)
 
+    # exporting the model    
+    joblib.dump(rf, os.path.join(out_dir, "random_forest.joblib"))
+    # use compress to reduce model size. I need to check if it has any impact on model's accuracy
+    # joblib.dump(rf, os.path.join(out_dir, "random_forest.joblib"), compress=3)
+    # to load model, use the following command
+    # rf = joblib.load(os.path.join(out_dir, "random_forest.joblib"))
+
     # Use the forest's predict method on the test data
-    predictions = rf.predict(test_features)
+    predictions = rf.predict(val_features)
     # Calculate the absolute errors
-    errors = abs(predictions - test_labels)
+    errors = abs(predictions - val_labels)
     # Print out the mean absolute error (mae)
     print('Mean Absolute Error:', round(np.mean(errors), 2))
 
     # Get accuracy
     predicted_labels = np.round(predictions)
-    accuracy = accuracy_score(test_labels, predicted_labels)   
-    print('Accuracy:', accuracy*100, "%")
+    accuracy = accuracy_score(val_labels, predicted_labels)   
+    print('Accuracy:', round(accuracy*100, 2), "%")
 
     # saving gt and predicted labels
-    data = {"gt_labels": test_labels.tolist(), "predicted_labels": predicted_labels.tolist()}
+    data = {"gt_labels": val_labels.tolist(), "predicted_labels": predicted_labels.tolist()}
     df = pd.DataFrame(data)
     df.to_csv(os.path.join(out_dir, "gt_and_predicted_labels.csv"))
 
@@ -78,5 +93,3 @@ if __name__ == "__main__":
     feature_importances = sorted(feature_importances, key = lambda x: x[1], reverse = True)
     # Print out the feature and importances 
     [print('Variable: {:20} Importance: {}'.format(*pair)) for pair in feature_importances]
-
-
